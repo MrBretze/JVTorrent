@@ -2,28 +2,32 @@ package fr.bretzel.jvtorrent;
 
 import com.jfoenix.controls.JFXCheckBox;
 
-import fr.bretzel.jvtorrent.runnable.ClearDownload;
-import fr.bretzel.jvtorrent.util.Download;
+import com.jfoenix.controls.JFXTextArea;
+import com.jfoenix.validation.RequiredFieldValidator;
+
+import de.jensd.fx.fontawesome.*;
+import de.jensd.fx.fontawesome.Icon;
+
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import org.apache.log4j.*;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.*;
 import java.util.List;
+import java.util.Timer;
 import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 import java.util.jar.JarInputStream;
 
 /**
@@ -31,29 +35,16 @@ import java.util.jar.JarInputStream;
  */
 public class JVTorrent extends Application {
 
-    public static java.util.List<Download> downloads = new ArrayList<Download>();
     public static Stage mainStage = null;
+    public static Logger logger;
+    public static File appDir;
 
     public static void main(String[] args) {
-        Thread clearDownload = new Thread(new ClearDownload());
+        logger = Logger.getLogger(JVTorrent.class);
 
-        clearDownload.start();
+        logger.setLevel(Level.DEBUG);
 
         try {
-            File file = new File("library/");
-            if (!file.exists()) {
-                file.mkdir();
-            }
-
-            File lib = new File("library/JFoenix.jar");
-
-            if (!lib.exists()) {
-                lib.createNewFile();
-                downloadFile("http://www.jfoenix.com/download/jfoenix.jar", true, lib);
-            }
-
-            loadLib(lib);
-
             launch(args);
         } catch (Exception e) {
             String message = "An error that occurred: \n" + "Error: " + e.getLocalizedMessage();
@@ -65,6 +56,40 @@ public class JVTorrent extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
+        if (logger.isDebugEnabled()) {
+            logger.debug("This a debug !");
+
+            VBox main = new VBox();
+            final JFXTextArea area = new JFXTextArea();
+            area.setLabelFloat(true);
+            RequiredFieldValidator validator = new RequiredFieldValidator();
+            // NOTE adding error class to text area is causing the cursor to disapper
+            validator.setErrorStyleClass("");
+            validator.setMessage("Please type something!");
+            validator.setIcon(new Icon(AwesomeIcon.WARNING, "1em", ";", "error"));
+            area.getValidators().add(validator);
+            area.focusedProperty().addListener((o, oldVal, newVal) -> {
+                if (!newVal) area.validate();
+            });
+
+            main.getChildren().add(area);
+            StackPane pane = new StackPane();
+            pane.getChildren().add(main);
+            StackPane.setMargin(main, new Insets(100));
+            pane.setStyle("-fx-background-color:WHITE");
+            final Scene scene = new Scene(pane, 800, 600);
+            scene.getStylesheets().add(JVTorrent.class.getResource("/css/jfoenix-components.css").toExternalForm());
+
+            Stage stg2 = new Stage();
+            stg2.setTitle("Debug Console");
+            stg2.setScene(scene);
+            stg2.show();
+            TextAreaOutputStream out = new TextAreaOutputStream(area);
+            Appender appender = new FileAppender();
+            appender.
+            logger.addAppender(out);
+        }
+
         this.mainStage = stage;
         FlowPane pane;
         pane = new FlowPane();
@@ -87,6 +112,17 @@ public class JVTorrent extends Application {
         stage.setResizable(true);
         stage.getIcons().add(new Image(getResource("/icon/torrent.png").toExternalForm()));
         stage.show();
+
+        Timer t = new Timer();
+        t.scheduleAtFixedRate(new TimerTask() {
+
+            int i = 0;
+
+            @Override
+            public void run() {
+                JVTorrent.logger.debug("Test: " + i);
+            }
+        }, 1000, 1000);
     }
 
     public static URL getResource(String destination) {
@@ -96,48 +132,6 @@ public class JVTorrent extends Application {
             e.printStackTrace();
         }
         return null;
-    }
-
-    private static void downloadFile(String url, boolean popup, File out) {
-        Download d = new Download(url, popup, out);
-        d.download();
-        downloads.add(d);
-    }
-
-    private static void loadLib(File file) {
-        JarFile jarFile = null;
-        try {
-            jarFile = new JarFile(file);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        Enumeration e = jarFile.entries();
-
-        URL[] urls = new URL[0];
-        try {
-            urls = new URL[]{ new URL("jar:file:" + file.getAbsolutePath() + "!/") };
-        } catch (MalformedURLException e1) {
-            e1.printStackTrace();
-        }
-        URLClassLoader cl = URLClassLoader.newInstance(urls, JVTorrent.class.getClassLoader());
-
-        while (e.hasMoreElements()) {
-            JarEntry je = (JarEntry) e.nextElement();
-            if(je.isDirectory() || !je.getName().endsWith(".class")){
-                continue;
-            }
-            // -6 because of .class
-            String className = je.getName().substring(0,je.getName().length()-6);
-            className = className.replace('/', '.');
-            try {
-                cl.loadClass(className);
-            } catch (ClassNotFoundException e1) {
-                e1.printStackTrace();
-            }
-
-        }
-
-        System.out.print("Number of class load for lib " + file.getName() + " : " + 0 + "\n");
     }
 
     private static List<String> getClasseNames(File jar) {
